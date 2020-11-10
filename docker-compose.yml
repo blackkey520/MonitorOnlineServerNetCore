@@ -1,0 +1,8 @@
+version: '3.4'
+
+services:
+  server.datareceive:
+    image: ${DOCKER_REGISTRY-}serverdatareceive
+    build:
+      context: .
+      dockerfile: Server.DataReceive/Dockerfile

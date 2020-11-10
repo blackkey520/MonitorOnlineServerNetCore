@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Server.DataReceive": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}
