@@ -49,10 +49,18 @@ namespace Server.Core.Sockets
         /// </summary>
         public void Start()
         {
-            if (IsRunning)
-                //日志输出
+            //if (IsRunning)
 
-            listenerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                listenerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+           
             listenerSocket.Bind(this.IPEndPoint);
             listenerSocket.Listen(this.ConnectionBacklog);
 

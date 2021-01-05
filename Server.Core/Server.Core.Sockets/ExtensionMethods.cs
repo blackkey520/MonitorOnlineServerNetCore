@@ -23,7 +23,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception e)
             {
-                //异常输出
+                throw;
             }
 
         }
@@ -46,7 +46,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception e)
             {
-                //异常输出
+                throw;
             }
 
             try
@@ -55,7 +55,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception e)
             {
-                //异常输出
+                throw;
             }
         }
     }

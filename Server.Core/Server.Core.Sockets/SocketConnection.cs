@@ -106,7 +106,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception ex)
             {
-                //异常输出
+                throw;
             }
 
         }
@@ -136,7 +136,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception ex)
             {
-                //异常输出
+                throw;
             }
         }
 

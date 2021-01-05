@@ -1,20 +1,26 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using Server.Core.RunTime;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using static Server.Core.RunTime.GlobalENUM;
 
 namespace Server.Core.Sockets
 {
     public class AsynTcpServer
     {
+        private IEnumerable<IAnalytice> m_Analytices { get; set; }
+        public IMsgQueue m_msgQueue { get; set; }
+        private readonly ILogger<AsynTcpServer> m_logger;
         private readonly object SyncRoot = new object();
 
-         int m_port = 8080;//端口号
-         string m_ip = "127.0.0.1";
-
+        int m_port = 8080;//端口号
+        string m_ip = "127.0.0.1";
+        string m_anayticename = "";
         // 用于监听Socket
         private TcpAsynSocketListener listenSocket;
         //可复用的字节缓存用于Socket
@@ -43,13 +49,14 @@ namespace Server.Core.Sockets
             get { return m_connectionList; }
         }
          
-
+        
 
          
-        public AsynTcpServer(string ip,int port)
+        public AsynTcpServer(string ip,int port,string anayticename)
         {
             m_port = port;
             m_ip = ip;
+            m_anayticename = anayticename;
             Init();
         }
         private Thread listenThread = null;
@@ -77,7 +84,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception ee)
             {
-                //异常输出
+                m_logger.LogError("TCP链路异常-连接初始化异常,解析模块{0}",m_anayticename);
             }
 
         }
@@ -101,7 +108,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception ex)
             {
-                //异常输出
+                m_logger.LogError("TCP链路异常-连接关闭发生异常,解析模块{0}", m_anayticename);
             }
         }
    
@@ -109,7 +116,6 @@ namespace Server.Core.Sockets
         public void Start()
         {
             listenSocket.Start();
-
             m_connectionList = new List<AsynSocketConnection>();
         }
 
@@ -122,9 +128,8 @@ namespace Server.Core.Sockets
             }
             catch (Exception ee)
             {
-                //异常输出
+                m_logger.LogError("TCP链路异常-数据发送异常,解析模块{0}", m_anayticename);
             }
-
         }
         /// <summary> 
         /// 发送数据完成处理函数 
@@ -141,6 +146,7 @@ namespace Server.Core.Sockets
             }
             catch
             {
+                m_logger.LogError("TCP链路异常-数据发送结束事件异常,解析模块{0}", m_anayticename);
             }
         }
 
@@ -177,7 +183,7 @@ namespace Server.Core.Sockets
             }
             catch (Exception ee)
             {
-                //异常输出
+                m_logger.LogError("TCP链路异常-连接建立发生异常,解析模块{0}", m_anayticename);
             }
 
         }
@@ -208,43 +214,39 @@ namespace Server.Core.Sockets
                         //关闭客户端Socket,清理资源
                         e.SocketConnection.Client.Close();
                     }
-                    try
-                    {
+                    
                         if (e.SocketConnection != null)
                         {
                             if (e.SocketConnection.Client != null)
                             {
-                                ///添加连接属性
-                                //connectionInfo conInfo = new connectionInfo();
-                                //conInfo.DEGIMN = e.SocketConnection.DeviceCode;
+                            ///添加连接属性
+                            //connectionInfo conInfo = new connectionInfo();
+                            //conInfo.DEGIMN = e.SocketConnection.DeviceCode;
 
-                                //if (e.SocketConnection.Client.Connected)
-                                //{
-                                //    string ipport = e.SocketConnection.Client.RemoteEndPoint.ToString();
-                                //    string[] ipportArray = ipport.Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
-                                //    conInfo.connectionIP = ipportArray[0];
-                                //    conInfo.connectionPort = ipportArray[1];
-                                //}
+                            //if (e.SocketConnection.Client.Connected)
+                            //{
+                            //    string ipport = e.SocketConnection.Client.RemoteEndPoint.ToString();
+                            //    string[] ipportArray = ipport.Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+                            //    conInfo.connectionIP = ipportArray[0];
+                            //    conInfo.connectionPort = ipportArray[1];
+                            //}
 
-                                //conInfo.latestDateTime = e.SocketConnection.LastReceivedTime;
-                                //conInfo.IsDataRemove = true;
-                                //InterfaceCollection.ConnectionInfoCollection.Add(conInfo);
+                            //conInfo.latestDateTime = e.SocketConnection.LastReceivedTime;
+                            //conInfo.IsDataRemove = true;
+                            //InterfaceCollection.ConnectionInfoCollection.Add(conInfo);
 
 
-                                //有连接上来日志输出
+                            //有连接上来日志输出
+                            m_logger.LogInformation("信息输出-新的连接建立");
                             }
                         }
 
-                    }
-                    catch (Exception ex)
-                    {
-                        //异常输出
-                    }
+                    
                 }
             }
             catch (Exception ee)
             {
-                //异常输出
+                m_logger.LogError("TCP链路异常-连接断开后续处置发生异常,解析模块{0}", m_anayticename);
             }
         }
 
@@ -253,24 +255,54 @@ namespace Server.Core.Sockets
             try
             {
                 byte[] buffer = e.Session.DataHolder.JoinAllBuffer().Concat(e.Data).ToArray();
-                connection_OnDataReceived_buffer(sender, e, buffer);
+                 
+                AsynSocketConnection socketCon = (AsynSocketConnection)sender;
+                string packageString = string.Join(" ", ((byte[])e.Data).Select(o => string.Format("0x{0:X},", o).PadLeft(2, '0')));
+                int rest = 0;
+                PackageInfo packageInfo = null;
+                while (buffer.Length != 0 && buffer.Length - rest != 0)
+                {
+                     
+                        IAnalytice analytice = m_Analytices.FirstOrDefault(a => a.AnalyticeName == m_anayticename);
+                        packageInfo = analytice.Read(buffer, out rest);
+                        if (packageInfo != null)
+                        {
+                            if (packageInfo.DeviceCode != null)
+                            {
+                                socketCon.DeviceCode = packageInfo.DeviceCode.ToString();
+                                
+                            }
+                        }
+                    
+                    if (rest >= 0 && packageInfo != null)
+                    {
+                        //输出包信息
+                        m_msgQueue.SendMsg<PackageInfo>(MQTYPE.ORIGANLPACKAGE.ToString(), packageInfo);
+                        //XXX成功解析
+
+                        buffer = buffer.Skip(rest).ToArray();
+                        rest = 0;
+                    }
+                    else
+                    {
+                        //解析有问题 
+                        buffer = buffer.Skip(rest).ToArray();
+                        rest = 0;
+                        break;
+                    }
+                }
+                //保存没有解析成功的数据
+                e.Session.DataHolder.Enqueue(buffer);
             }
             catch (Exception ex)
             {
-                //异常输出
+                m_logger.LogError("TCP链路异常-数据接收初步解析发生异常,解析模块{0}", m_anayticename);
             }
         }
 
         
 
-        void connection_OnDataReceived_buffer(object sender, SocketDataEventArgs e, byte[] buffer)
-        {
-            AsynSocketConnection socketCon = (AsynSocketConnection)sender;
-            string packageString = string.Join(" ", ((byte[])e.Data).Select(o => string.Format("0x{0:X},", o).PadLeft(2, '0')));
-
-            
-            
-        }
+        
 
         
         
@@ -289,8 +321,8 @@ namespace Server.Core.Sockets
             }
             catch (Exception ee)
             {
-                //异常输出
-                throw;
+                m_logger.LogError("TCP链路异常-创建监听异常,解析模块{0}", m_anayticename);
+                return new ListenerInfo();
             }
 
         }
